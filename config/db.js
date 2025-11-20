@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const connectDB = async () => {
   try {
     // Hardcode URI langsung
-    await mongoose.connect('mongodb://localhost:27017/bapdb', {
+    await mongoose.connect('mongodb+srv://bpnd_db:HesoyamAezakmi3223!@bpnd.brdjonu.mongodb.net/?appName=bpnd', {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });
