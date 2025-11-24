@@ -103,38 +103,109 @@ exports.kirimWaBlast = async (req, res) => {
   try {
     const { message, ids } = req.body;
 
+    console.log('📨 WA Blast request:', { ids: ids?.length, messageLength: message?.length });
+
     if (!ids || ids.length === 0) {
       return res.status(400).json({ message: 'Tidak ada data yang dipilih.' });
     }
 
+    if (!message || !message.trim()) {
+      return res.status(400).json({ message: 'Pesan tidak boleh kosong.' });
+    }
+
+    // Cek status WhatsApp client
+    try {
+      const state = await client.getState();
+      console.log('📱 Client state:', state);
+      if (state !== 'CONNECTED') {
+        return res.status(503).json({
+          message: 'WhatsApp belum terhubung. Silakan scan QR code terlebih dahulu.',
+          state
+        });
+      }
+    } catch (err) {
+      console.error('❌ State check error:', err);
+      return res.status(503).json({ message: 'WhatsApp client error. Silakan restart server.' });
+    }
+
+    // Ambil data wajib pajak
     const data = await WajibPajak.find({ _id: { $in: ids } });
-    const numbers = data.map(d => d.nomor_wa);
+    
+    if (data.length === 0) {
+      return res.status(404).json({ message: 'Data wajib pajak tidak ditemukan.' });
+    }
 
-    const failed = [];
+    const results = [];
 
-    for (const no of numbers) {
-      const raw = formatNumber(no);
-      const number = raw.includes('@c.us') ? raw : `${raw}@c.us`;
+    for (let i = 0; i < data.length; i++) {
+      const item = data[i];
+      const rawNumber = item.nomor_wa;
+      
+      if (!rawNumber) {
+        console.log(`⚠️ [${i+1}/${data.length}] ${item.nama} tidak punya nomor WA`);
+        results.push({
+          nama: item.nama,
+          nomor: '-',
+          status: 'failed',
+          error: 'Nomor WA tidak tersedia'
+        });
+        continue;
+      }
+
+      let clean = rawNumber.replace(/[^0-9]/g, '');
+      if (clean.startsWith('0')) clean = '62' + clean.slice(1);
+      else if (!clean.startsWith('62')) clean = '62' + clean;
+
+      const chatId = `${clean}@c.us`;
+      console.log(`[${i+1}/${data.length}] 📤 Sending to ${item.nama} (${chatId})...`);
 
       try {
-        await client.sendMessage(number, message || 'Halo, Anda belum melaporkan pajak. Harap segera melapor.');
+        await client.sendMessage(chatId, message);
+        console.log(`✅ Success: ${item.nama}`);
+        results.push({
+          nama: item.nama,
+          nomor: rawNumber,
+          status: 'success'
+        });
       } catch (err) {
-        console.error(`Gagal kirim ke ${number}:`, err.message);
-        failed.push(no);
+        console.error(`❌ Failed: ${item.nama} -`, err.message);
+        
+        let errorMsg = err.message;
+        if (errorMsg.includes('403') || errorMsg.includes('not registered')) {
+          errorMsg = 'Nomor tidak terdaftar di WhatsApp';
+        }
+        
+        results.push({
+          nama: item.nama,
+          nomor: rawNumber,
+          status: 'failed',
+          error: errorMsg
+        });
+      }
+
+      // Delay 2 detik antar pesan (kecuali pesan terakhir)
+      if (i < data.length - 1) {
+        console.log('⏳ Waiting 2 seconds...');
+        await new Promise(r => setTimeout(r, 2000));
       }
     }
 
-    if (failed.length > 0) {
-      return res.status(207).json({
-        message: `Beberapa pesan gagal dikirim ke: ${failed.join(', ')}`,
-        failed,
-      });
-    }
+    const summary = {
+      total: results.length,
+      success: results.filter(r => r.status === 'success').length,
+      failed: results.filter(r => r.status === 'failed').length
+    };
 
-    return res.json({ message: 'Pesan berhasil dikirim ke semua nomor yang dipilih.' });
+    console.log('📊 Summary:', summary);
+
+    return res.json({
+      message: `Blast selesai: ${summary.success} berhasil, ${summary.failed} gagal`,
+      results,
+      summary
+    });
   } catch (err) {
-    console.error('Error kirim WA blast:', err.message);
-    return res.status(500).json({ message: err.message });
+    console.error('💥 Error kirim WA blast:', err.message);
+    return res.status(500).json({ message: 'Terjadi kesalahan saat mengirim pesan', error: err.message });
   }
 };
 
