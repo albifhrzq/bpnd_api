@@ -2,7 +2,8 @@ const mongoose = require('mongoose');
 
 const UserSchema = new mongoose.Schema({
   nip: { type: String, required: true, unique: true },
-  whatsappNumber: { type: String, required: true },
+  whatsappNumber: { type: String },
+  username: { type: String },
   nama: { type: String, required: true },
   jabatan: { type: String, required: true },
   email: { type: String, required: true, unique: true },

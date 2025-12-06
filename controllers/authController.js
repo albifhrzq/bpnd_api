@@ -7,7 +7,7 @@ const nodemailer = require('nodemailer');
 
 exports.register = async (req, res) => {
   try {
-    const { nip, whatsappNumber, nama, jabatan, email, password } = req.body;
+    const { nip, whatsappNumber, username, nama, jabatan, email, password, role, status } = req.body;
 
     const existingEmail = await User.findOne({ email });
     const existingNip = await User.findOne({ nip });
@@ -19,12 +19,14 @@ exports.register = async (req, res) => {
 
     const user = new User({
       nip,
-      whatsappNumber,
+      whatsappNumber: whatsappNumber || username, // Support both fields
+      username: username || whatsappNumber,
       nama,
       jabatan,
       email,
       password: hashedPassword,
-      role: 'user'
+      role: role || 'user',
+      status: status || 'aktif'
     });
 
     await user.save();
@@ -32,7 +34,7 @@ exports.register = async (req, res) => {
     res.status(201).json({ msg: 'Registrasi berhasil' });
   } catch (error) {
     console.error('REGISTER ERROR:', error);
-    res.status(500).json({ msg: 'Server error' });
+    res.status(500).json({ msg: 'Server error', error: error.message });
   }
 };
 

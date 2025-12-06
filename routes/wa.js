@@ -106,4 +106,45 @@ router.post('/blast', verifyToken, isSuperAdmin, async (req, res) => {
   });
 });
 
+// ===================
+// POST /logout
+// ===================
+router.post('/logout', verifyToken, isSuperAdmin, async (req, res) => {
+  try {
+    console.log('🔌 Logging out WhatsApp client...');
+    
+    // Check if client is ready
+    const status = getStatus();
+    if (!status.isReady) {
+      return res.status(400).json({
+        message: 'WhatsApp client belum terhubung'
+      });
+    }
+
+    // Logout the client
+    await client.logout();
+    console.log('✅ WhatsApp client logged out successfully');
+
+    // Delete .wwebjs_auth folder to completely remove session
+    const fs = require('fs');
+    const path = require('path');
+    const authPath = path.join(__dirname, '..', '.wwebjs_auth');
+    
+    if (fs.existsSync(authPath)) {
+      fs.rmSync(authPath, { recursive: true, force: true });
+      console.log('🗑️ .wwebjs_auth folder deleted');
+    }
+
+    return res.json({
+      message: 'WhatsApp berhasil logout. Silakan scan QR code lagi untuk menghubungkan.'
+    });
+  } catch (err) {
+    console.error('❌ Error logging out:', err);
+    return res.status(500).json({
+      message: 'Error logging out WhatsApp',
+      error: err.message
+    });
+  }
+});
+
 module.exports = router;
